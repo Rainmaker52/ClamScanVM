@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.33808.371
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ClamScanVM", "ClamScanVM\ClamScanVM.csproj", "{C127852D-A151-4E42-8232-43BF62BD2018}"
+	ProjectSection(ProjectDependencies) = postProject
+		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF} = {BE3F6261-9FFE-439A-BDF1-BFC223A522DF}
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NFSLibrary", "NFSLibrary\NFSLibrary.csproj", "{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C127852D-A151-4E42-8232-43BF62BD2018}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C127852D-A151-4E42-8232-43BF62BD2018}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C127852D-A151-4E42-8232-43BF62BD2018}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C127852D-A151-4E42-8232-43BF62BD2018}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E5B09EB5-C4DE-4174-AD2A-22D6848DCC85}
+	EndGlobalSection
+EndGlobal
