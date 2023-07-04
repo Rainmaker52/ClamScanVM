@@ -9,16 +9,24 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ClamAV.Net" Version="0.1.151-beta" />
-    <PackageReference Include="Fody" Version="6.7.0">
+    <PackageReference Include="Fody" Version="6.8.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="LTRData.DiscUtils" Version="1.0.28" />
     <PackageReference Include="MethodTimer.Fody" Version="3.2.2" />
-    <PackageReference Include="NLog" Version="5.2.0" />
-    <PackageReference Include="Polly" Version="8.0.0-alpha.2" />
+    <PackageReference Include="NLog" Version="5.2.1" />
+    <PackageReference Include="Polly" Version="8.0.0-alpha.5" />
+    <PackageReference Include="Roslynator.Analyzers" Version="4.3.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="9.4.0.72892">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
-    <PackageReference Include="System.IO.Pipelines" Version="7.0.0" />
+    <PackageReference Include="System.IO.Pipelines" Version="8.0.0-preview.5.23280.8" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,113 +34,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="DiscUtils">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.BootConfig">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.BootConfig.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Btrfs">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Btrfs.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Containers">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Containers.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Core">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Dmg">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Dmg.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Ext">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Ext.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Fat">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Fat.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.FileSystems">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.FileSystems.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.HfsPlus">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.HfsPlus.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Iscsi">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Iscsi.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Iso9660">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Iso9660.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Lvm">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Lvm.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Net">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Net.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Nfs">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Nfs.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Ntfs">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Ntfs.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.OpticalDiscSharing">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.OpticalDiscSharing.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.OpticalDisk">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.OpticalDisk.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Registry">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Registry.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Sdi">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Sdi.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.SquashFs">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.SquashFs.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Streams">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Streams.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Swap">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Swap.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Transports">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Transports.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Udf">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Udf.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Vdi">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Vdi.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Vhd">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Vhd.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Vhdx">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Vhdx.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.VirtualFileSystem">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.VirtualFileSystem.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Vmdk">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Vmdk.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Wim">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Wim.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Xfs">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Xfs.dll</HintPath>
-    </Reference>
-    <Reference Include="DiscUtils.Xva">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\DiscUtils.Xva.dll</HintPath>
-    </Reference>
-    <Reference Include="lzfse-net">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\lzfse-net.dll</HintPath>
-    </Reference>
-    <Reference Include="lzo.net">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\lzo.net.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Bcl.HashCode">
-      <HintPath>..\..\..\..\..\..\Temp\LTRData.DiscUtils\Library\Debug\netstandard2.0\Microsoft.Bcl.HashCode.dll</HintPath>
+    <Reference Include="nClam">
+      <HintPath>..\..\..\..\..\..\Temp\nClam\nClam\bin\Debug\netstandard2.0\nClam.dll</HintPath>
     </Reference>
   </ItemGroup>
+
 </Project>

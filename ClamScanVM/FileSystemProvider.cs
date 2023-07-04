@@ -1,42 +1,13 @@
 ﻿using DiscUtils;
 
+using Microsoft.Win32.SafeHandles;
+
 namespace ClamScanVM;
 
-internal class FileSystemProvider : IDisposable
+internal class FileSystemProvider : DiscUtils.FileLocator, IDisposable
 {
-    private readonly string directoryName;
-    private readonly List<Stream> openStreams = new();
     private bool disposedValue;
-
-    public FileSystemProvider(string directoryName)
-    {
-        this.directoryName = directoryName;
-    }
-
-    internal IEnumerable<string> FindVMXFiles()
-    {
-        return Directory.EnumerateFiles(this.directoryName, "*.vmx", SearchOption.AllDirectories);
-    }
-
-    internal Stream OpenFile(string fileName)
-    {
-        var streamOut = new FileStream(fileName, FileMode.Open, FileAccess.Read);
-
-        // The VMDK file itself contains extents on the VMDK "flat" file where the actual data is stored
-/*        if (fileName.ToLower().EndsWith(".vmdk"){
-            var openedDisk = DiscUtils.Raw.Disk.OpenDisk()
-
-        }
-*/
-        this.openStreams.Add(streamOut);
-        return streamOut;
-    }
-
-    internal void CloseFile(Stream stream)
-    {
-        this.openStreams.Remove(stream);
-        stream.Close();
-    }
+    private string hintPath;
 
     protected virtual void Dispose(bool disposing)
     {
@@ -44,13 +15,7 @@ internal class FileSystemProvider : IDisposable
         {
             if (disposing)
             {
-                if(this.openStreams != null)
-                {
-                    foreach(var stream in this.openStreams)
-                    {
-                        stream?.Close();
-                    }
-                }
+                // Managed objects
             }
 
             // TODO: free unmanaged resources (unmanaged objects) and override finalizer
@@ -71,5 +36,54 @@ internal class FileSystemProvider : IDisposable
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    public FileSystemProvider(string hintPath = "")
+    {
+        this.hintPath = hintPath;
+    }
+
+    public override bool Exists(string fileName) 
+        => File.Exists(fileName);
+
+    protected override Stream OpenFile(string fileName, FileMode mode, FileAccess access, FileShare share)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(fileName);
+        this.hintPath = Path.GetFullPath(fileName);
+        return new FileStream(fileName, mode, access, share);
+    }
+
+    internal Stream OpenFile(string fileName)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(fileName);
+        return this.OpenFile(fileName, FileMode.Open, FileAccess.Read, FileShare.Read);
+    }
+
+    public override FileLocator GetRelativeLocator(string path)
+        => new FileSystemProvider(Path.GetFullPath(path));
+
+    public override string GetFullPath(string path)
+        => Path.GetFullPath(path);
+
+    public override string GetDirectoryFromPath(string path)
+        => Path.GetDirectoryName(path) ?? String.Empty;
+
+    public override string GetFileFromPath(string path)
+        => Path.GetFileName(path) ?? String.Empty;
+
+    public override DateTime GetLastWriteTimeUtc(string path)
+        => File.GetLastWriteTimeUtc(path);
+
+    public override bool HasCommonRoot(FileLocator other)
+        => true;
+
+    public override string ResolveRelativePath(string path)
+    {
+        return Path.Join(this.hintPath, path);
+    }
+
+    internal IEnumerable<string> FindVMXFiles()
+    {
+        return Directory.EnumerateFiles(this.hintPath, "*.vmx", SearchOption.AllDirectories);
     }
 }

@@ -2,7 +2,7 @@
 
 namespace ClamScanVM;
 [Serializable]
-internal class VMNotFoundException : Exception
+public class VMNotFoundException : Exception
 {
     public VMNotFoundException()
     {

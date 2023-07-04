@@ -9,7 +9,7 @@ using DiscUtils;
 namespace ClamScanVM;
 internal static class Extensions
 {
-    internal static void AddDisks(this VolumeManager volumeManager, IEnumerable<DiscUtils.Vmdk.Disk> disks)
+    internal static void AddDisks(this VolumeManager volumeManager, IEnumerable<DiscUtils.VirtualDisk> disks)
     {
         foreach(var disk in disks)
         {

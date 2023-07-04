@@ -4,9 +4,6 @@ using System.CommandLine;
 using System.Net;
 using System.Text;
 
-using ClamAV.Net.Client;
-using ClamAV.Net.Client.Results;
-
 using DiscUtils;
 using DiscUtils.Complete;
 using DiscUtils.Nfs;
@@ -15,6 +12,8 @@ using DiscUtils.Streams;
 using NLog;
 
 using NFSLibrary;
+using System.Threading.Channels;
+using System.Collections.Concurrent;
 
 namespace ClamScanVM;
 
@@ -23,7 +22,9 @@ internal static class Program
     public static async Task<int> Main(string[] args)
     {
         var returnCode = 0;
-        var rootCommand = new RootCommand("Scans Virtual Machine files for viruses using ClamAV directly from an NFS mount");
+        var rootCommand = new RootCommand(
+            "Scans Virtual Machine files for viruses using ClamAV directly from a local filesystem or NFS mount" +
+            "Ideally, the servers should be shutdown, but this is not required");
 
         var export = new Option<string>(
             aliases: new[] { "--nfsmount", "-m" },
@@ -85,66 +86,57 @@ internal static class Program
     {
         SetupHelper.SetupComplete();
 
+        string baseDirectory = @"C:\Temp\VMDKScan";
+        string[] vmNames = { "Windows XP Professional", "Rocky9", "StandardLinux", "LVMLinux", "Rocky9", "StandardLinux", "Rocky9", "Rocky9", "Rocky9" };
+        clamAVServer = "localhost:3260";
+        
+        List<Task<(Task<VirusScanner> Scanner, Task<VMDataReader> DataReader)>> allTasks = new();
 
-        string directoryName = @"C:\Temp\VMDKScan";
+        var maxTasks = new SemaphoreSlim(5);
 
-        var fsProvider = new FileSystemProvider(directoryName);
-        using var virtualMachine = await VirtualMachine.FindAndOpen("LVMLinux", fsProvider);
-
-        var volumeManager = new DiscUtils.VolumeManager();
-
-        volumeManager.AddDisks(virtualMachine.disks);
-
-        foreach(var pVols in volumeManager.GetPhysicalVolumes())
+        foreach(var vm in vmNames)
         {
-            await Console.Out.WriteLineAsync($"Physical {pVols}");
-        }
+            var communicationChannel = Channel.CreateBounded<VMFileBlock>(
+                new BoundedChannelOptions(1024)
+                {
+                    SingleReader = false,
+                    SingleWriter = false,
+                    FullMode = BoundedChannelFullMode.Wait
+                });
 
-        var volumesInGuest = volumeManager.GetLogicalVolumes();
-        foreach (var vol in volumesInGuest)
-        {
-            var openFS = vol.Open();
-            var filesystemType = DiscUtils.FileSystemManager.DetectFileSystems(openFS);
+            using var fsProvider = new FileSystemProvider(baseDirectory);
 
-            IFileSystem? filesystem = null;
-            switch (filesystemType[0].Name)
+            var hasPermissionToRun = await maxTasks.WaitAsync(0);
+
+            if (!hasPermissionToRun && allTasks.Count > 0)
             {
-                case "ext":
-                    filesystem = new DiscUtils.Ext.ExtFileSystem(openFS);
-                    break;
-                case "xfs":
-                    filesystem = new DiscUtils.Xfs.XfsFileSystem(openFS);
-                    break;
-                case "btrfs":
-                    filesystem = new DiscUtils.Btrfs.BtrfsFileSystem(openFS);
-                    break;
-                case "ntfs":
-                    filesystem = new DiscUtils.Ntfs.NtfsFileSystem(openFS);
-                    break;
-                // Unsupported filesystems which should not fail
-                case "Swap":
-                case "swap":
-                    continue;
-                default:
-                    throw new NotSupportedException($"Filesystem type {filesystemType[0].Name} not supported");
+                await Console.Out.WriteLineAsync($"Maximum number of threads running {allTasks.Count}. Waiting for one to complete");
+                var completedTask = await Task.WhenAny(allTasks);
+                var intermediateTask = await completedTask;
+                var completedScanner = await intermediateTask.Scanner;
 
+                completedScanner.VirusFound -= ScanManager.VirusFound;
+                completedScanner.ScanCompleted -= ScanManager.ScanCompleted;
+                maxTasks.Release();
+                allTasks.Remove(completedTask);
+                await maxTasks.WaitAsync();
             }
 
-            var guestDirs = new Stack<string>();
-            guestDirs.Push("/");
-            while (guestDirs.TryPop(out var currentDir))
+            var newTask = Task.Run(async () =>
             {
-                foreach (var dir in filesystem.GetDirectories(currentDir))
-                {
-                    guestDirs.Push($"{dir}");
-                    Console.WriteLine($"Newly added: {dir}");
-                }
-                foreach (var file in filesystem.GetFiles(currentDir))
-                {
-                    Console.WriteLine(file);
-                }
-            }
+                var thisVM = await VirtualMachine.FindAndOpen(vm, fsProvider);
+                var dataReader = new VMDataReader(thisVM, communicationChannel.Writer);
+                var scanner = new VirusScanner(thisVM.Name, communicationChannel.Reader, clamAVServer);
+
+                scanner.ScanCompleted += ScanManager.ScanCompleted;
+                scanner.VirusFound += ScanManager.VirusFound;
+
+                return (scanner.Start(), dataReader.Start());
+            });
+            allTasks.Add(newTask);
         }
+
+        await Task.WhenAll(allTasks);
 
         return 0;
 

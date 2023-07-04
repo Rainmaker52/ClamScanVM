@@ -1,23 +1,28 @@
 ﻿using System.Buffers;
+using System.ComponentModel.DataAnnotations;
 using System.IO.Pipelines;
 using System.Text;
 
+using DiscUtils;
 using DiscUtils.Streams;
+using DiscUtils.Xva;
 
 namespace ClamScanVM;
 
 internal class VirtualMachine : IDisposable
 {
-    private readonly string virtualMachineName;
     private readonly FileSystemProvider fsProvider;
     private string? vmxFileLocation;
     private readonly Dictionary<string, string> vmxProperties = new();
-    internal List<DiscUtils.Vmdk.Disk> disks = new();
+    internal List<DiscUtils.VirtualDisk> Disks { get; private set; } = new();
+    internal LogicalVolumeInfo[]? Volumes { get; private set; }
+    public string Name { get; init; }
+
     private bool disposedValue;
 
     private VirtualMachine(string vmName, FileSystemProvider fsProvider)
     {
-        this.virtualMachineName = vmName;
+        this.Name = vmName;
         this.fsProvider = fsProvider;
     }
 
@@ -26,8 +31,16 @@ internal class VirtualMachine : IDisposable
         await FindVMXFile();
         await LoadVMXProperties();
         await OpenDisks();
+        await DetectVolumes();
 
-        Console.WriteLine($"Found VM at [{this.vmxFileLocation}]. {this.disks.Count} disks opened.");
+        Console.WriteLine($"Found VM at [{this.vmxFileLocation}]. {this.Disks.Count} disks opened.");
+    }
+
+    private async Task DetectVolumes()
+    {
+        var volumeManager = new DiscUtils.VolumeManager();
+        volumeManager.AddDisks(this.Disks);
+        this.Volumes = volumeManager.GetLogicalVolumes();
     }
 
     private async Task OpenDisks()
@@ -38,16 +51,23 @@ internal class VirtualMachine : IDisposable
             {
                 var vmDirectory = Path.GetDirectoryName(this.vmxFileLocation);
                 var descriptorFile = Path.Join(vmDirectory, this.vmxProperties[key]);
-                using var descriptorStream = this.fsProvider.OpenFile(descriptorFile);
-                var descriptor = new DiscUtils.Vmdk.DiskImageFile(descriptorStream, Ownership.Dispose);
-                
-                
-                
-                
+
+                // The only way to use non-monolithic and non-stream optimized VMDKs is by opening them through a custom DiscFileSystem
+                // By giving that methods to resolve files, the OpenDisk() can resolve the files from the extents
+                // For local files, the built-in would have worked. But due to how NFS client needs to switch for each file opened, I can implement
+                // the NFS version more efficient by using multiple clients in parallel
+
+                // Added bonus - if it happens to be a monolithic VMDK file (unlikely with modern vSphere - more likely with Workstation)
+                // this method will open the disk regardless. It also works with 2 GB split VMDK files
+
+                // Bottom line - with a custom DiscFileSystem provider, the OpenDisk() call becomes far more reliable.
+
+                var localReadOnlyDisc = new LocalReadOnlyDiscFilesystem();
+                var vmdkDisk = DiscUtils.VirtualDisk.OpenDisk(localReadOnlyDisc, descriptorFile, FileAccess.Read);
                 await Console.Out.WriteLineAsync($"Opening {descriptorFile}");
-                var diskStream = this.fsProvider.OpenFile(descriptorFile);
-                var disk = new DiscUtils.Vmdk.Disk(diskStream, Ownership.Dispose);
-                this.disks.Add(disk);
+
+                // This is the complete combined SparseStream, extents etc have been resolved
+                this.Disks.Add(vmdkDisk);
             }
         }
     }
@@ -61,9 +81,14 @@ internal class VirtualMachine : IDisposable
                 var fileStream = this.fsProvider.OpenFile(vmxFile);
                 var pipeReader = PipeReader.Create(fileStream);
 
+
+                // Read the VMX file and compare the displayName of the VM
+                // The GUID may be different at this point compared to the time of backup
+                // This may require a bit of tweaking, as the displayName may also have been updated to something like CV_VM01_LiveMount
+
                 do
                 {
-                    // Cannot use TryRead() when the intiator is called with an existing stream
+                    // Cannot use TryRead() when the ctor is called with an existing stream
                     var readResult = await pipeReader.ReadAsync();
                     if (readResult.IsCanceled || readResult.IsCompleted)
                     {
@@ -83,7 +108,7 @@ internal class VirtualMachine : IDisposable
                     if (fullLine.StartsWith("displayName"))
                     {
                         var displayName = fullLine.Split("=")[1].Trim().Trim('\"');
-                        if (displayName.Equals(this.virtualMachineName))
+                        if (displayName.Equals(this.Name))
                         {
                             this.vmxFileLocation = vmxFile;
                             break;
@@ -159,9 +184,9 @@ internal class VirtualMachine : IDisposable
         {
             if (disposing)
             {
-                if(this.disks != null)
+                if(this.Disks != null)
                 {
-                    foreach (var disk in this.disks)
+                    foreach (var disk in this.Disks)
                     {
                         disk?.Dispose();
                     }
@@ -169,13 +194,13 @@ internal class VirtualMachine : IDisposable
                 this.fsProvider?.Dispose();
             }
 
-            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-            // TODO: set large fields to null
+            // free unmanaged resources (unmanaged objects) and override finalizer
+            // set large fields to null
             disposedValue = true;
         }
     }
 
-    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+    // override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
     // ~VirtualMachine()
     // {
     //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
