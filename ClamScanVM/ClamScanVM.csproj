@@ -9,13 +9,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.0.143" />
     <PackageReference Include="Fody" Version="6.8.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="LTRData.DiscUtils" Version="1.0.28" />
     <PackageReference Include="MethodTimer.Fody" Version="3.2.2" />
-    <PackageReference Include="NLog" Version="5.2.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0-preview.5.23280.1" />
+    <PackageReference Include="NLog" Version="5.2.2" />
     <PackageReference Include="Polly" Version="8.0.0-alpha.5" />
     <PackageReference Include="Roslynator.Analyzers" Version="4.3.0">
       <PrivateAssets>all</PrivateAssets>
@@ -35,7 +37,7 @@
 
   <ItemGroup>
     <Reference Include="nClam">
-      <HintPath>..\..\..\..\..\..\Temp\nClam\nClam\bin\Debug\netstandard2.0\nClam.dll</HintPath>
+      <HintPath>..\..\..\..\..\..\Temp\nClam\nClam\bin\Debug\netstandard2.1\nClam.dll</HintPath>
     </Reference>
   </ItemGroup>
 

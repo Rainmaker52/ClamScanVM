@@ -13,7 +13,6 @@ internal sealed class NfsFileStream : Stream
     {
         this.fileName = fileName;
         this.nfsClient = filesystem;
-        Console.WriteLine($"Initializing for {fileName}");
     }
 
     public override bool CanRead => true;

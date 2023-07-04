@@ -6,12 +6,15 @@ using System.Threading.Channels;
 
 using nClam;
 
+using NLog;
+
 namespace ClamScanVM;
 internal class VirusScanner
 {
     private readonly string vmName;
     private readonly ChannelReader<VMFileBlock> reader;
     private readonly string clamAVAddress;
+    private readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
 
     internal event EventHandler<VirusScanCompletedEventArgs> ScanCompleted;
     internal event EventHandler<VirusFoundEventArgs> VirusFound;
@@ -25,7 +28,7 @@ internal class VirusScanner
 
     internal async Task<VirusScanner> Start()
     {
-        var scannerThreads = 5;
+        var scannerThreads = 10;
         List<Task> tasks = new();
 
         while(scannerThreads-- > 0)
@@ -57,49 +60,50 @@ internal class VirusScanner
         //Send PING command to ClamAV
         if(!await clamAvClient.PingAsync().ConfigureAwait(false))
         {
-            throw new Exception("Could not ping ClamAV server!");
+            throw new ArgumentException("Could not ping ClamAV server!");
         }
 
         //Get ClamAV engine and virus database version
         var result = await clamAvClient.GetVersionAsync().ConfigureAwait(false);
 
-        Console.WriteLine($"ClamAV version - {result}");
+        logger.Info($"ClamAV version - {result}");
 
         while(await this.reader.WaitToReadAsync().ConfigureAwait(false))
         {
             var dataToScan = await this.reader.ReadAsync().ConfigureAwait(false);
 
-            var buffer = ArrayPool<byte>.Shared.Rent(dataToScan.Content.Length);
             try
             {
-                // The library only takes byte[].
-                // By using ArrayPool rent/release vs ToArray() on the buffer, memory usage was halved.
-                dataToScan.Content.CopyTo(buffer);
-                var scanResult = await clamAvClient.SendAndScanFileAsync(buffer).ConfigureAwait(false);
+                var scanResult = await clamAvClient.SendAndScanFileAsync(dataToScan.Content, CancellationToken.None).ConfigureAwait(false);
                 switch (scanResult.Result)
                 {
                     case ClamScanResults.Clean:
+                        // Possible audit action here
                         break;
                     case ClamScanResults.VirusDetected:
                         var e = new VirusFoundEventArgs()
                         {
                             FileName = dataToScan.FileName,
-                            VirusName = $"{scanResult.InfectedFiles?.First()?.VirusName} - {scanResult.RawResult}",
+                            VirusName = $"{scanResult.InfectedFiles?[0]?.VirusName} - {scanResult.RawResult}",
                             Offset = dataToScan.BlockNumber,
                             VMName = this.vmName
                         };
                         OnVirusFound(e);
                         break;
                     case ClamScanResults.Error:
-                        await Console.Out.WriteLineAsync($"Error while scanning {dataToScan.FileName}");
+                        logger.Warn($"Error returned from virusscanner while scanning {dataToScan.FileName} - Response [{scanResult.RawResult}]");
+                        break;
+                    case ClamScanResults.Unknown:
+                        logger.Warn($"Unknown response when scanning {dataToScan.FileName} - Response [{scanResult.RawResult}]");
                         break;
                     default:
                         throw new UnreachableException();
                 }
+                logger.Trace($"Scanned file {dataToScan.FileName} block {dataToScan.BlockNumber} from VM {this.vmName} - {scanResult.Result}");
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(buffer, false);
+                ;
             }
         }
     }

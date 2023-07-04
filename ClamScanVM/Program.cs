@@ -1,19 +1,13 @@
 ﻿using System;
 using System.Buffers;
 using System.CommandLine;
-using System.Net;
-using System.Text;
 
-using DiscUtils;
 using DiscUtils.Complete;
-using DiscUtils.Nfs;
-using DiscUtils.Streams;
 
 using NLog;
 
-using NFSLibrary;
 using System.Threading.Channels;
-using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace ClamScanVM;
 
@@ -84,18 +78,31 @@ internal static class Program
 
     private static async Task<int> MainAsync(string nfsExport, string csAPIEndpoint, string clamAVServer, bool ignoreCertificateErrors)
     {
+        Logger.SetupGlobalLoggingPreferences();
+
+        NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
+        var totalRuntimeStopwatch = Stopwatch.StartNew();
+
         SetupHelper.SetupComplete();
 
         string baseDirectory = @"C:\Temp\VMDKScan";
-        string[] vmNames = { "Windows XP Professional", "Rocky9", "StandardLinux", "LVMLinux", "Rocky9", "StandardLinux", "Rocky9", "Rocky9", "Rocky9" };
+        //string[] vmNames = { "LVMLinux", "Windows XP Professional", "Rocky9", "StandardLinux"};
+        //string[] vmNames = { "LVMLinux" };
+        string[] vmNames = { "Windows XP Professional" };
         clamAVServer = "localhost:3260";
-        
+        logger.Info("Base directory is {0}", baseDirectory);
+
         List<Task<(Task<VirusScanner> Scanner, Task<VMDataReader> DataReader)>> allTasks = new();
 
-        var maxTasks = new SemaphoreSlim(5);
+        using var maxTasks = new SemaphoreSlim(1);
 
         foreach(var vm in vmNames)
         {
+            // This determines the maximum amount of memory used.
+            // The producer (datareader) can keep producing, while the consumer (VirusScanner) is behind
+            // up to these number of object. Every object is a maximum of 2 MB.
+            // So a value of 1024 means there could be a max of 2 GB of memory used while the scanner is catching up.
             var communicationChannel = Channel.CreateBounded<VMFileBlock>(
                 new BoundedChannelOptions(1024)
                 {
@@ -110,7 +117,7 @@ internal static class Program
 
             if (!hasPermissionToRun && allTasks.Count > 0)
             {
-                await Console.Out.WriteLineAsync($"Maximum number of threads running {allTasks.Count}. Waiting for one to complete");
+                logger.Info($"Maximum number of threads running {allTasks.Count}. Waiting for one to complete");
                 var completedTask = await Task.WhenAny(allTasks);
                 var intermediateTask = await completedTask;
                 var completedScanner = await intermediateTask.Scanner;
@@ -118,7 +125,10 @@ internal static class Program
                 completedScanner.VirusFound -= ScanManager.VirusFound;
                 completedScanner.ScanCompleted -= ScanManager.ScanCompleted;
                 maxTasks.Release();
-                allTasks.Remove(completedTask);
+                lock (allTasks)
+                {
+                    allTasks.Remove(completedTask);
+                }
                 await maxTasks.WaitAsync();
             }
 
@@ -133,196 +143,25 @@ internal static class Program
 
                 return (scanner.Start(), dataReader.Start());
             });
-            allTasks.Add(newTask);
-        }
-
-        await Task.WhenAll(allTasks);
-
-        return 0;
-
-        string nfsServer = "rocky9.mshome.net";
-        string exportName = "/srv/nfs";
-        //string[] VMDKPaths = new[] { "Disk.vhd" };
-        string[] VMDKPaths = new[] { "Debian 11 with spaces in name.vmdk", "Debian 11 with spaces in name - Copy.vmdk" };
-
-        var nfsClient = new NfsClient(NfsClient.NfsVersion.V3);
-        var ipAddr = Dns.GetHostAddresses(nfsServer);
-        nfsClient.Connect(ipAddr[0]);
-        var exports = nfsClient.GetExportedDevices();
-        foreach(var export in exports)
-        {
-            nfsClient.MountDevice(export);
-            var searchDirs = new Stack<string>();
-            searchDirs.Push(".");
-            while(searchDirs.TryPop(out var currentDirectory))
+            lock (allTasks)
             {
-                var itemsInDir = nfsClient.GetItemList(currentDirectory);
-                foreach(var item in itemsInDir)
-                {
-                    Console.WriteLine($"{currentDirectory}/{item}");
-                    if (nfsClient.GetItemAttributes(item)?.NFSType == NFSLibrary.Protocols.Commons.NFSItemTypes.NFDIR)
-                    {
-                        searchDirs.Push($"{item}");
-                        continue;
-                    }
-                    if (VMDKPaths.Contains(item))
-                    {
-                        var nfsFileStream = new NfsFileStream(item, nfsClient);
-
-                        using var disk = new DiscUtils.Vmdk.Disk(nfsFileStream, Ownership.Dispose);
-                        Console.WriteLine(disk.DiskClass);
-                        var volmgr = new VolumeManager();
-                        _ = volmgr.AddDisk(disk);
-                        var pVols = volmgr.GetLogicalVolumes();
-                        foreach(var vol in pVols)
-                        {
-                            var openFS = vol.Open();
-                            var filesystemType = DiscUtils.FileSystemManager.DetectFileSystems(openFS);
-
-                            IFileSystem? filesystem = null;
-                            switch (filesystemType[0].Name)
-                            {
-                                case "ext":
-                                    filesystem = new DiscUtils.Ext.ExtFileSystem(openFS);
-                                    break;
-                                case "ntfs":
-                                    filesystem = new DiscUtils.Ntfs.NtfsFileSystem(openFS);
-                                    break;
-                                // Unsupported filesystems which should not fail
-                                case "Swap":
-                                case "swap":
-                                    continue;
-                                default:
-                                    throw new NotSupportedException($"Filesystem type {filesystemType[0].Name} not supported");
-
-                            }
-
-                            var guestDirs = new Stack<string>();
-                            guestDirs.Push("/");
-                            while (guestDirs.TryPop(out var currentDir))
-                            {
-                                foreach (var dir in filesystem.GetDirectories(currentDir))
-                                {
-                                    guestDirs.Push($"{dir}");
-                                    Console.WriteLine($"Newly added: {dir}");
-                                }
-                                foreach(var file in filesystem.GetFiles(currentDir))
-                                {
-                                    Console.WriteLine(file);
-                                }
-                            }
-                        }
-                    }
-                }
+                allTasks.Add(newTask);
             }
         }
 
-        return 0;
-        
-        foreach (var export in exports)
+        var tupleTasks = await Task.WhenAll(allTasks);
+        var tasks1 = new List<Task<VirusScanner>>();
+        var tasks2 = new List<Task<VMDataReader>>();
+
+        foreach(var t in tupleTasks)
         {
-            Console.WriteLine($"Found export {export}");
-            var mount = new DiscUtils.Nfs.NfsFileSystem(nfsServer, "/srv/nfs");
-
-            Console.WriteLine("Mounted!");
-            var items = mount.GetFiles(".");
-
-            Console.WriteLine("Retrieved files");
-
-            foreach (var item in items)
-            {
-                if (!VMDKPaths.Contains(item))
-                    continue;
-
-                // Found an item to process
-
-                // Internally, the NFS-Client copies between buffers.
-                // If I pass it a stream, it would copy byte[] buffers with size of "blocksize"
-
-                Console.WriteLine($"Processing item {item}");
-
-                //var vDisk = new DiscUtils.Vmdk.DiskImageFile(s, DiscUtils.Streams.Ownership.None);
-
-
-                var fstream = new FileStream("C:\\Users\\Dannie Obbink\\Downloads\\Debian 11 Server (64bit).vmdk", FileMode.Open, FileAccess.Read);
-                var d = new DiscUtils.Vmdk.Disk(fstream, Ownership.Dispose);
-
-
-
-                // Ensure Ownership is set to "Dispose". Otherwise, the entire stream is 
-                //var d = new DiscUtils.Vmdk.Disk(s, Ownership.Dispose);
-
-
-                Console.WriteLine("Disk allocated");
-                foreach(var partition in d.Partitions.Partitions)
-                {
-
-
-                    Console.WriteLine(partition);
-                    var partitionStream = partition.Open();
-                    var volmgvolumeManager = new DiscUtils.VolumeManager();
-                    //volumeManager.AddDisk()
-                    var fs = DiscUtils.FileSystemManager.DetectFileSystems(partitionStream);
-                    foreach(var filesystem in fs)
-                    {
-                        Console.WriteLine(filesystem.Name);
-                    }
-                }
-
-                
-
-
-
-
-
-
-
-
-                //Console.WriteLine(d.Partitions.Partitions);
-
-
-                d.Dispose();
-                //vDisk.Dispose();
-            }
-
+            tasks1.Add(t.Scanner);
+            tasks2.Add(t.DataReader);
         }
-
-        //var nfsMount = new NfsFileSystem(nfsServer, exportName);
-        //Console.WriteLine(nfsMount.FileExists(VMDKPaths[0]));
-
-        Console.ReadLine();
-
-
-
-
-
+        await Task.WhenAll(tasks1);
+        await Task.WhenAll(tasks2);
+       
+        logger.Info($"Full runtime of {vmNames.Length} VMs {totalRuntimeStopwatch.Elapsed}");
         return 0;
-
-        /*
-        const string connectionString = "tcp://winserver2022:3310";
-        const string eicarAvTest = @"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
-
-        //Create a client
-        var clamAvClient = ClamAvClient.Create(new Uri(connectionString));
-
-        //Send PING command to ClamAV
-        await clamAvClient.PingAsync().ConfigureAwait(false);
-
-        //Get ClamAV engine and virus database version
-        var result = await clamAvClient.GetVersionAsync().ConfigureAwait(false);
-
-        Console.WriteLine(
-            $"ClamAV version - {result.ProgramVersion} , virus database version {result.VirusDbVersion}");
-
-        await using (var memoryStream = new MemoryStream(Encoding.UTF8.GetBytes(eicarAvTest)))
-        {
-            //Send a stream to ClamAV scan
-            var res = await clamAvClient.ScanDataAsync(memoryStream).ConfigureAwait(false);
-
-            Console.WriteLine($"Scan result : Infected - {res.Infected} , Virus name {res.VirusName}");
-        }
-        return 0;
-
-        */
     }
 }

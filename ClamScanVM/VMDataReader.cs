@@ -1,22 +1,24 @@
-﻿using System.Threading.Channels;
-
-using DiscUtils.Xva;
-using DiscUtils;
+﻿using System.Buffers;
+using System.Collections.Concurrent;
 using System.IO.Pipelines;
-using System.Buffers;
-using System.Globalization;
+using System.Threading.Channels;
+
+using DiscUtils;
+
+using NLog;
 
 namespace ClamScanVM;
 internal class VMDataReader
 {
     private readonly VirtualMachine virtualMachine;
     private readonly ChannelWriter<VMFileBlock> virusScanner;
+    NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
     private const int blockSize = 25 * 1024 * 1024; // 25 MB / the stream limit on ClamAV Docker
 
-    public VMDataReader(VirtualMachine thisVM, ChannelWriter<VMFileBlock> writer)
+    public VMDataReader(VirtualMachine thisVM, ChannelWriter<VMFileBlock> virusScanWriter)
     {
         this.virtualMachine = thisVM;
-        this.virusScanner = writer;
+        this.virusScanner = virusScanWriter;
     }
     internal async Task<VMDataReader> Start()
     {
@@ -25,28 +27,34 @@ internal class VMDataReader
             throw new OpenVMException($"VM {virtualMachine.Name} - Did not find any recognizable volumes");
         }
 
-        var maxSimultaneousVolumes = new SemaphoreSlim(4);
+        using var maxSimultaneousVolumes = new SemaphoreSlim(1);
         var outstandingTasks = new List<Task>();
 
         foreach (var volume in virtualMachine.Volumes)
         {
-            await Console.Out.WriteLineAsync($"Waiting for volume {volume}");
             var readyToRun = await maxSimultaneousVolumes.WaitAsync(0);
 
             if (!readyToRun && outstandingTasks.Count > 0)
             {
-                await Console.Out.WriteLineAsync("Maximum volume limit reached. Waiting...");
+                logger.Info("Maximum volume limit reached. Waiting...");
                 var completedTask = await Task.WhenAny(outstandingTasks);
                 maxSimultaneousVolumes.Release();
-                outstandingTasks.Remove(completedTask);
+                lock (outstandingTasks)
+                {
+                    outstandingTasks.Remove(completedTask);
+                }
                 await maxSimultaneousVolumes.WaitAsync();
             }
 
             var newTask = Task.Run(() => this.ReadVolumeData(volume));
 
-            outstandingTasks.Add(newTask);
+            lock (outstandingTasks)
+            {
+                outstandingTasks.Add(newTask);
+            }
         }
         await Task.WhenAll(outstandingTasks);
+        this.virusScanner.Complete();
         return this;
     }
 
@@ -120,10 +128,15 @@ internal class VMDataReader
                     var blockNumber = 0U;
                     while(await this.virusScanner.WaitToWriteAsync().ConfigureAwait(false))
                     {
-                        var readResult = await fileReader.ReadAsync().ConfigureAwait(false);
+                        var readResult = await fileReader.ReadAsync();
                         if(readResult.IsCanceled || readResult.IsCompleted)
                         {
                             break;
+                        }
+                        if(readResult.Buffer.Length == 0)
+                        {
+                            // Empty file, does not need to be sent to AV scanner
+                            continue;
                         }
                         VMFileBlock? request = null;
                         if(readResult.Buffer.IsSingleSegment)
@@ -141,17 +154,16 @@ internal class VMDataReader
                     }
                     await fileReader.CompleteAsync().ConfigureAwait(false);
                 }
-                catch(System.IO.FileNotFoundException)
+                catch (System.IO.FileNotFoundException)
                 {
                     // Unresolvable symlink. Which is not interesting for us anyway, as symlinks don't contain data.
                     ;
                 }
                 catch(Exception e)
                 {
-                    await Console.Out.WriteLineAsync($"Encountered error [{e.Message}] while processing {entry}");
+                    logger.Error($"Encountered error [{e.Message}] while processing {entry}");
                 }
             }
-
         }
     }
 }

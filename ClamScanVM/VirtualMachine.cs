@@ -14,6 +14,8 @@ internal class VirtualMachine : IDisposable
     private readonly FileSystemProvider fsProvider;
     private string? vmxFileLocation;
     private readonly Dictionary<string, string> vmxProperties = new();
+    private readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
     internal List<DiscUtils.VirtualDisk> Disks { get; private set; } = new();
     internal LogicalVolumeInfo[]? Volumes { get; private set; }
     public string Name { get; init; }
@@ -33,7 +35,7 @@ internal class VirtualMachine : IDisposable
         await OpenDisks();
         await DetectVolumes();
 
-        Console.WriteLine($"Found VM at [{this.vmxFileLocation}]. {this.Disks.Count} disks opened.");
+        logger.Info($"Found VM at [{this.vmxFileLocation}]. {this.Disks.Count} disks opened.");
     }
 
     private async Task DetectVolumes()
