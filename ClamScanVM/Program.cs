@@ -32,30 +32,30 @@ internal static class Program
 
         var clamAPI = new Option<string>(
             aliases: new[] { "--clamserver" },
-            description: "The ClamAV server endpoint",
             getDefaultValue:
                 () =>
                 {
                     // Unfortunately, ClamAV on Windows does not support Unix Domain sockets, even though the OS may (Windows 2019+)
                     // When starting the daemon, no socket file is created.
                     if (OperatingSystem.IsWindows())
-                        return "tcp://localhost:3311";
+                        return "localhost:3311";
                     else
                         return "/var/run/clamav/clamd.socket";
-                });
+                },
+            description: "The ClamAV server endpoint");
 
         rootCommand.AddOption(clamAPI);
 
         var ignoreCertError = new Option<bool>(
             aliases: new[] { "--ignore-certificate-errors" },
-            description: "Whether or not to ignore certificate errors towards the Commvault API",
-            getDefaultValue: () => false);
+            getDefaultValue: () => false,
+            description: "Whether or not to ignore certificate errors towards the Commvault API");
         rootCommand.AddOption(ignoreCertError);
 
         var cvUser = new Option<string>(
             aliases: new[] { "--username" },
-            description: "The username to authenticate to the Commvault API",
-            getDefaultValue: () => "admin");
+            getDefaultValue: () => "admin",
+            description: "The username to authenticate to the Commvault API");
         rootCommand.AddOption(cvUser);
 
         var cvPassword = new Option<string>(
@@ -72,8 +72,7 @@ internal static class Program
                 context.ParseResult.GetValueForOption(ignoreCertError)
             ));
 
-        returnCode = await rootCommand.InvokeAsync(args);
-        return returnCode;
+        return await rootCommand.InvokeAsync(args);
     }
 
     private static async Task<int> MainAsync(string nfsExport, string csAPIEndpoint, string clamAVServer, bool ignoreCertificateErrors)
@@ -88,8 +87,8 @@ internal static class Program
 
         string baseDirectory = @"C:\Temp\VMDKScan";
         //string[] vmNames = { "LVMLinux", "Windows XP Professional", "Rocky9", "StandardLinux"};
-        //string[] vmNames = { "LVMLinux" };
-        string[] vmNames = { "Windows XP Professional" };
+        string[] vmNames = { "Rocky9" };
+        //string[] vmNames = { "Windows XP Professional" };
         clamAVServer = "localhost:3260";
         logger.Info("Base directory is {0}", baseDirectory);
 
@@ -153,13 +152,15 @@ internal static class Program
         var tasks1 = new List<Task<VirusScanner>>();
         var tasks2 = new List<Task<VMDataReader>>();
 
-        foreach(var t in tupleTasks)
+        foreach(var (Scanner, DataReader) in tupleTasks)
         {
-            tasks1.Add(t.Scanner);
-            tasks2.Add(t.DataReader);
+            tasks1.Add(Scanner);
+            tasks2.Add(DataReader);
         }
-        await Task.WhenAll(tasks1);
+        
+        // Datareader should exit before scanner
         await Task.WhenAll(tasks2);
+        await Task.WhenAll(tasks1);
        
         logger.Info($"Full runtime of {vmNames.Length} VMs {totalRuntimeStopwatch.Elapsed}");
         return 0;

@@ -84,7 +84,7 @@ internal class VirusScanner
                         var e = new VirusFoundEventArgs()
                         {
                             FileName = dataToScan.FileName,
-                            VirusName = $"{scanResult.InfectedFiles?[0]?.VirusName} - {scanResult.RawResult}",
+                            VirusName = scanResult.InfectedFiles?[0]?.VirusName ?? "(Virus name not returned by scanner)",
                             Offset = dataToScan.BlockNumber,
                             VMName = this.vmName
                         };
@@ -106,6 +106,11 @@ internal class VirusScanner
                 ;
             }
         }
+        var completeMsg = new VirusScanCompletedEventArgs()
+        {
+            CompletedSuccess = true
+        };
+        OnScanCompleted(completeMsg);
     }
 
     protected virtual void OnScanCompleted(VirusScanCompletedEventArgs e)

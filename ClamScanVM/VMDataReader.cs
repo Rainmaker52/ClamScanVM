@@ -117,6 +117,11 @@ internal class VMDataReader
                     continue;
                 }
 
+                if (entry.EndsWith("eicar.com.txt"))
+                {
+                    logger.Info("Here");
+                }
+
                 try
                 {
                     using var fileHandle = filesystem.OpenFile(entry, FileMode.Open, FileAccess.Read);
@@ -138,16 +143,12 @@ internal class VMDataReader
                             // Empty file, does not need to be sent to AV scanner
                             continue;
                         }
-                        VMFileBlock? request = null;
-                        if(readResult.Buffer.IsSingleSegment)
-                        {
-                            request = new VMFileBlock(entry, blockNumber, readResult.Buffer.First);
-                        }
-                        else
-                        {
-                            // Creates a bit of GC pressure
-                            request = new VMFileBlock(entry, blockNumber, readResult.Buffer.ToArray());
-                        }
+                        
+                        // Note: we need to pass .ToArray() and have the runtime make a copy.
+                        // Immediately passing the ReadOnlyMemory<byte> will cause the buffer to contain garbage
+                        // after the AdvanceTo() - when it comes out of the other end of the pipe.
+                        // This is sort of expected ("don't use .Buffer after AdvanceTo()") but one would expect an automatic safety copy. It does not.
+                        var request = new VMFileBlock(entry, blockNumber, readResult.Buffer.ToArray());
                         await this.virusScanner.WriteAsync(request).ConfigureAwait(false);
                         fileReader.AdvanceTo(readResult.Buffer.End);
                         blockNumber++;

@@ -1,6 +1,6 @@
 ﻿#TODO
 
-- Doublecheck whether virusses are actually discovered
+- Doublecheck whether virusses are actually discovered - they are now.
 - Add performance metrics
 - Improve error handling
 - Add interfaces for extension

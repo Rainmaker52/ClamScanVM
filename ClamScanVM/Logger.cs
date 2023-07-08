@@ -32,8 +32,8 @@ internal static class Logger
             config.AddRule(minimumLogLevel, LogLevel.Fatal, consoleLogger);
         }
 
-        var currentTime = DateTime.UtcNow.ToString("s");
-        string fullLogPath = Path.Join(logDirectory, currentTime).Replace(':', '_');
+        var currentTime = DateTime.UtcNow.ToString("s").Replace(':', '_');
+        string fullLogPath = Path.Join(logDirectory, currentTime);
 
         if (!Path.Exists(fullLogPath))
         {
