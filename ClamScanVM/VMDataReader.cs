@@ -112,7 +112,7 @@ internal class VMDataReader
                 if(isUnixFS && (entryAttributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
                 {
                     // Ignore directory symlinks on Unix. We'll scan the link target anyway
-                    // Unsure about Windows. Leave that in for now
+                    // Unsure about Windows.
                     continue;
                 }
 

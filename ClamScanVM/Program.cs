@@ -87,22 +87,38 @@ internal static class Program
 
         SetupHelper.SetupComplete();
 
+
+        // These should be commandline options ----
         string baseDirectory = @"C:\Temp\VMDKScan";
-        string[] vmNames = { "LVMLinux", "Windows XP Professional", "Rocky9", "StandardLinux"};
+        //string[] vmNames = { "LVMLinux", "Windows XP Professional", "Rocky9", "StandardLinux"};
         //string[] vmNames = { "Rocky9", "LVMLinux", "Rocky9", "Rocky9", "Rocky9" };
-        //string[] vmNames = { "Rocky9" };
+        string[] vmNames = { "Rocky9" };
         //string[] vmNames = { "Windows XP Professional" };
-        clamAVServer = "localhost:3260";
         logger.Info("Base directory is {0}", baseDirectory);
-        var scannerOptions = "Server=127.0.0.1;Port=3260";
+
+        var scannerEngine = typeof(AMSIEngine);
+        var scannerOptions = String.Empty;
+
+        //var scannerEngine = typeof(ClamEngine);
+        //var scannerOptions = "Server=127.0.0.1;Port=3260";
+
         var simultaneousVMs = 10;
         var simultaneousVolumesPerVM = 1;
         var scanThreadsPerVM = 10;
 
+        var enableMimeCheck = true;
+
+        // End these should be commandline options
+
         var avEngineOptions = new List<KeyValuePair<string, string>>();
 
-        foreach(var option in scannerOptions.Split(';'))
+        // Scanner options are global
+        foreach (var option in scannerOptions.Split(';'))
         {
+            if (option == "")
+            {
+                continue;
+            }
             var k = option.Split('=')[0];
             var v = option.Split("=")[1];
 
@@ -155,11 +171,31 @@ internal static class Program
                     FullMode = BoundedChannelFullMode.Wait
                 });
 
+
+            VirusScanner<IVirusEngine> scanner;
+            MimeChecker? mimeChecker = null;
+            if (enableMimeCheck)
+            {
+                var intermediateCommChannel = Channel.CreateBounded<VMFileBlock>(
+                    new BoundedChannelOptions(1024)
+                    {
+                        SingleReader = false,
+                        SingleWriter = false,
+                        FullMode = BoundedChannelFullMode.Wait
+                    });
+
+                mimeChecker = new MimeChecker(communicationChannel.Reader, intermediateCommChannel.Writer);
+                scanner = new VirusScanner<IVirusEngine>(vm, intermediateCommChannel.Reader, scannerEngine, scanThreadsPerVM);
+            }
+            else
+            {
+                scanner = new VirusScanner<IVirusEngine>(vm, communicationChannel.Reader, scannerEngine, scanThreadsPerVM);
+            }
+
             using var fsProvider = new FileSystemProvider(baseDirectory);
 
             var thisVM = await VirtualMachine.FindAndOpen(vm, fsProvider);
             var dataReader = new VMDataReader(thisVM, communicationChannel.Writer);
-            var scanner = new VirusScanner<IVirusEngine>(vm, communicationChannel.Reader, typeof(ClamEngine), scanThreadsPerVM);
 
             scanner.ScanCompleted += ScanManager.ScanCompleted;
             scanner.VirusFound += ScanManager.VirusFound;
@@ -171,6 +207,10 @@ internal static class Program
                     dataReader.Start(simultaneousVolumesPerVM),
                     scanner.Start(avEngineOptions)
                 };
+                if(mimeChecker is not null)
+                {
+                    subTasks.Add(mimeChecker.Start());
+                }
 
                 await Task.WhenAll(subTasks);
             });

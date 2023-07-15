@@ -32,7 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AntiMalwareScanInterface\AntiMalwareScanInterface.csproj" />
     <ProjectReference Include="..\NFSLibrary\NFSLibrary.csproj" />
+    <ProjectReference Include="..\SharedResources\SharedResources.csproj" />
   </ItemGroup>
 
   <ItemGroup>

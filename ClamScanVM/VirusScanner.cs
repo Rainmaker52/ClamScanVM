@@ -73,12 +73,12 @@ internal class VirusScanner<T> where T : IVirusEngine
 
     private async Task ListenAndScan(IVirusEngine instance)
     {
-        while (await this.reader.WaitToReadAsync().ConfigureAwait(false))
+        while (await this.reader.WaitToReadAsync())
         {
-            var dataToScan = await this.reader.ReadAsync().ConfigureAwait(false);
-
             try
             {
+                var dataToScan = await this.reader.ReadAsync();
+
                 var scanResult = await instance.ScanBuffer(dataToScan.Content).ConfigureAwait(false);
                 switch (scanResult.ShortResult)
                 {
@@ -106,6 +106,10 @@ internal class VirusScanner<T> where T : IVirusEngine
                         throw new UnreachableException();
                 }
                 logger.Trace($"Scanned file {dataToScan.FileName} block {dataToScan.BlockNumber} from VM {this.vmName} - {scanResult.ShortResult}");
+            }
+            catch (ChannelClosedException)
+            {
+                logger.Warn($"Channel on thread {Environment.CurrentManagedThreadId} was attempting to read while Wait completed");
             }
             finally
             {

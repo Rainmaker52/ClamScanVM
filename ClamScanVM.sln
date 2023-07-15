@@ -10,6 +10,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ClamScanVM", "ClamScanVM\Cl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NFSLibrary", "NFSLibrary\NFSLibrary.csproj", "{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AntiMalwareScanInterface", "AntiMalwareScanInterface\AntiMalwareScanInterface.csproj", "{903189B0-AC30-4603-89F0-10B5F0FECD8D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharedResources", "SharedResources\SharedResources.csproj", "{372341CF-C2C2-4E0A-A459-27BC1A2FFFBD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,6 +28,14 @@ Global
 		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BE3F6261-9FFE-439A-BDF1-BFC223A522DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{903189B0-AC30-4603-89F0-10B5F0FECD8D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{903189B0-AC30-4603-89F0-10B5F0FECD8D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{903189B0-AC30-4603-89F0-10B5F0FECD8D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{903189B0-AC30-4603-89F0-10B5F0FECD8D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{372341CF-C2C2-4E0A-A459-27BC1A2FFFBD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{372341CF-C2C2-4E0A-A459-27BC1A2FFFBD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{372341CF-C2C2-4E0A-A459-27BC1A2FFFBD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{372341CF-C2C2-4E0A-A459-27BC1A2FFFBD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
