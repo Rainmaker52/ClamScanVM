@@ -7,37 +7,121 @@ using System.Threading.Channels;
 using nClam;
 
 using NLog;
+using System.Linq;
 
 namespace ClamScanVM;
-internal class VirusScanner
+internal class VirusScanner<T> where T : IVirusEngine
 {
     private readonly string vmName;
     private readonly ChannelReader<VMFileBlock> reader;
-    private readonly string clamAVAddress;
+    private readonly List<IVirusEngine> scannerInstances = new();
     private readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+    private readonly List<VirusScanException> errors = new();
 
     internal event EventHandler<VirusScanCompletedEventArgs> ScanCompleted;
     internal event EventHandler<VirusFoundEventArgs> VirusFound;
 
-    public VirusScanner(string vmName, ChannelReader<VMFileBlock> reader, string clamServerAddress)
+    // To recognize this particular scanner instance
+    internal Guid scannerGuid { get; init; } = Guid.NewGuid();
+
+    public VirusScanner(string vmName, ChannelReader<VMFileBlock> reader, Type scannerType, int scannerThreads)
     {
         this.vmName = vmName;
         this.reader = reader;
-        this.clamAVAddress = clamServerAddress;
-    }
-
-    internal async Task<VirusScanner> Start()
-    {
-        var scannerThreads = 10;
-        List<Task> tasks = new();
 
         while(scannerThreads-- > 0)
         {
-            tasks.Add(Task.Run(() => StartThread()));
+            var newInstance = (IVirusEngine)Activator.CreateInstance(scannerType);
+            if(newInstance == null)
+            {
+                logger.Error($"Failed to create instance for type [{scannerType}]");
+                continue;
+            }
+            this.scannerInstances.Add(newInstance);
+        }
+    }
+
+    internal async Task Start(List<KeyValuePair<string, string>> options)
+    {
+
+        var runningTasks = new List<Task>();
+
+        foreach (var instance in this.scannerInstances)
+        {
+            foreach (var kvp in options.Where(kvp => !instance.AcceptedOptions().Contains(kvp.Key)))
+            {
+                throw new ArgumentException($"Option {kvp.Key} is not listed as one of {instance.GetType().Name}'s options");
+            }
+
+            await instance.Initialize(options);
+            if (!await instance.TestConnection())
+            {
+                logger.Error("Failed to check engine readiness after initialization");
+                return;
+            }
+
+            var instanceTask = Task.Run(() => this.ListenAndScan(instance));
+            runningTasks.Add(instanceTask);
         }
 
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(runningTasks);
+        foreach(var instance in this.scannerInstances)
+        {
+            await instance.UnInitialize();
+        }
+    }
 
+    private async Task ListenAndScan(IVirusEngine instance)
+    {
+        while (await this.reader.WaitToReadAsync().ConfigureAwait(false))
+        {
+            var dataToScan = await this.reader.ReadAsync().ConfigureAwait(false);
+
+            try
+            {
+                var scanResult = await instance.ScanBuffer(dataToScan.Content).ConfigureAwait(false);
+                switch (scanResult.ShortResult)
+                {
+                    case ScanResultDescription.Clean:
+                        // Possible audit action here
+                        break;
+                    case ScanResultDescription.ThreatFound:
+                        var e = new VirusFoundEventArgs()
+                        {
+                            FileName = dataToScan.FileName,
+                            VirusName = scanResult.Payload ?? "(Virus name not returned by scanner)",
+                            Offset = dataToScan.BlockNumber,
+                            VMName = this.vmName
+                        };
+                        OnVirusFound(e);
+                        break;
+                    case ScanResultDescription.Error:
+                        logger.Warn($"Error returned from virusscanner while scanning {dataToScan.FileName} - Response [{scanResult.Payload}]");
+                        this.errors.Add(new VirusScanException());
+                        break;
+                    case ScanResultDescription.Unknown:
+                        logger.Warn($"Unknown response when scanning {dataToScan.FileName} - Response [{scanResult.Payload}]");
+                        break;
+                    default:
+                        throw new UnreachableException();
+                }
+                logger.Trace($"Scanned file {dataToScan.FileName} block {dataToScan.BlockNumber} from VM {this.vmName} - {scanResult.ShortResult}");
+            }
+            finally
+            {
+                ;
+            }
+        }
+        var completeMsg = new VirusScanCompletedEventArgs()
+        {
+            CompletedSuccess = true,
+            Errors = this.errors,
+            Identifyer = this.scannerGuid
+
+        };
+
+        OnScanCompleted(completeMsg);
+    }
         /*
         var e = new VirusFoundEventArgs()
         {
@@ -48,70 +132,6 @@ internal class VirusScanner
         };
         OnVirusFound(e);
         */
-
-        // To allow unsubscription of our event
-        return this;
-    }
-
-    private async Task StartThread()
-    {
-        var clamAvClient = new ClamClient(this.clamAVAddress.Split(":")[0], int.Parse(this.clamAVAddress.Split(":")[1]));
-
-        //Send PING command to ClamAV
-        if(!await clamAvClient.PingAsync().ConfigureAwait(false))
-        {
-            throw new ArgumentException("Could not ping ClamAV server!");
-        }
-
-        //Get ClamAV engine and virus database version
-        var result = await clamAvClient.GetVersionAsync().ConfigureAwait(false);
-
-        logger.Info($"ClamAV version - {result}");
-
-        while(await this.reader.WaitToReadAsync().ConfigureAwait(false))
-        {
-            var dataToScan = await this.reader.ReadAsync().ConfigureAwait(false);
-
-            try
-            {
-                var scanResult = await clamAvClient.SendAndScanFileAsync(dataToScan.Content, CancellationToken.None).ConfigureAwait(false);
-                switch (scanResult.Result)
-                {
-                    case ClamScanResults.Clean:
-                        // Possible audit action here
-                        break;
-                    case ClamScanResults.VirusDetected:
-                        var e = new VirusFoundEventArgs()
-                        {
-                            FileName = dataToScan.FileName,
-                            VirusName = scanResult.InfectedFiles?[0]?.VirusName ?? "(Virus name not returned by scanner)",
-                            Offset = dataToScan.BlockNumber,
-                            VMName = this.vmName
-                        };
-                        OnVirusFound(e);
-                        break;
-                    case ClamScanResults.Error:
-                        logger.Warn($"Error returned from virusscanner while scanning {dataToScan.FileName} - Response [{scanResult.RawResult}]");
-                        break;
-                    case ClamScanResults.Unknown:
-                        logger.Warn($"Unknown response when scanning {dataToScan.FileName} - Response [{scanResult.RawResult}]");
-                        break;
-                    default:
-                        throw new UnreachableException();
-                }
-                logger.Trace($"Scanned file {dataToScan.FileName} block {dataToScan.BlockNumber} from VM {this.vmName} - {scanResult.Result}");
-            }
-            finally
-            {
-                ;
-            }
-        }
-        var completeMsg = new VirusScanCompletedEventArgs()
-        {
-            CompletedSuccess = true
-        };
-        OnScanCompleted(completeMsg);
-    }
 
     protected virtual void OnScanCompleted(VirusScanCompletedEventArgs e)
     {

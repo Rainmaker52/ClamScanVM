@@ -20,14 +20,14 @@ internal class VMDataReader
         this.virtualMachine = thisVM;
         this.virusScanner = virusScanWriter;
     }
-    internal async Task<VMDataReader> Start()
+    internal async Task Start(int maxVolumes)
     {
         if (virtualMachine.Volumes == null || virtualMachine.Volumes.Length == 0)
         {
             throw new OpenVMException($"VM {virtualMachine.Name} - Did not find any recognizable volumes");
         }
 
-        using var maxSimultaneousVolumes = new SemaphoreSlim(1);
+        using var maxSimultaneousVolumes = new SemaphoreSlim(maxVolumes);
         var outstandingTasks = new List<Task>();
 
         foreach (var volume in virtualMachine.Volumes)
@@ -55,7 +55,6 @@ internal class VMDataReader
         }
         await Task.WhenAll(outstandingTasks);
         this.virusScanner.Complete();
-        return this;
     }
 
     private async Task ReadVolumeData(LogicalVolumeInfo volume)
@@ -117,11 +116,6 @@ internal class VMDataReader
                     continue;
                 }
 
-                if (entry.EndsWith("eicar.com.txt"))
-                {
-                    logger.Info("Here");
-                }
-
                 try
                 {
                     using var fileHandle = filesystem.OpenFile(entry, FileMode.Open, FileAccess.Read);
@@ -147,7 +141,7 @@ internal class VMDataReader
                         // Note: we need to pass .ToArray() and have the runtime make a copy.
                         // Immediately passing the ReadOnlyMemory<byte> will cause the buffer to contain garbage
                         // after the AdvanceTo() - when it comes out of the other end of the pipe.
-                        // This is sort of expected ("don't use .Buffer after AdvanceTo()") but one would expect an automatic safety copy. It does not.
+                        // This is sort of expected ("don't use .Buffer after AdvanceTo()") but one might expect an automatic safety copy. It does not.
                         var request = new VMFileBlock(entry, blockNumber, readResult.Buffer.ToArray());
                         await this.virusScanner.WriteAsync(request).ConfigureAwait(false);
                         fileReader.AdvanceTo(readResult.Buffer.End);

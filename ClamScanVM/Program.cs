@@ -8,6 +8,8 @@ using NLog;
 
 using System.Threading.Channels;
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace ClamScanVM;
 
@@ -86,18 +88,61 @@ internal static class Program
         SetupHelper.SetupComplete();
 
         string baseDirectory = @"C:\Temp\VMDKScan";
-        //string[] vmNames = { "LVMLinux", "Windows XP Professional", "Rocky9", "StandardLinux"};
-        string[] vmNames = { "Rocky9" };
+        string[] vmNames = { "LVMLinux", "Windows XP Professional", "Rocky9", "StandardLinux"};
+        //string[] vmNames = { "Rocky9", "LVMLinux", "Rocky9", "Rocky9", "Rocky9" };
+        //string[] vmNames = { "Rocky9" };
         //string[] vmNames = { "Windows XP Professional" };
         clamAVServer = "localhost:3260";
         logger.Info("Base directory is {0}", baseDirectory);
+        var scannerOptions = "Server=127.0.0.1;Port=3260";
+        var simultaneousVMs = 10;
+        var simultaneousVolumesPerVM = 1;
+        var scanThreadsPerVM = 10;
 
-        List<Task<(Task<VirusScanner> Scanner, Task<VMDataReader> DataReader)>> allTasks = new();
+        var avEngineOptions = new List<KeyValuePair<string, string>>();
 
-        using var maxTasks = new SemaphoreSlim(1);
+        foreach(var option in scannerOptions.Split(';'))
+        {
+            var k = option.Split('=')[0];
+            var v = option.Split("=")[1];
+
+            avEngineOptions.Add(KeyValuePair.Create(k, v));
+        }
+
+
+        List<Task> runningTasks = new();
+        ConcurrentDictionary<int, VirusScanner<IVirusEngine>> scannerInstances = new();
+        using var maxTasks = new SemaphoreSlim(simultaneousVMs);
 
         foreach(var vm in vmNames)
         {
+            var hasPermissionToRun = await maxTasks.WaitAsync(0);
+
+            if (!hasPermissionToRun && runningTasks.Count > 0)
+            {
+                logger.Info($"Maximum number of VMs running [{runningTasks.Count}]. Waiting for one to complete");
+                var completedTask = await Task.WhenAny(runningTasks);
+
+                maxTasks.Release();
+                lock (runningTasks)
+                {
+                    runningTasks.Remove(completedTask);
+                }
+                scannerInstances.Remove(completedTask.Id, out var completedObject);
+                if(completedObject != null)
+                {
+                    completedObject.VirusFound -= ScanManager.VirusFound;
+                    completedObject.ScanCompleted -= ScanManager.ScanCompleted;
+                }
+                else
+                {
+                    logger.Warn($"Possible memory leak detected");
+                }
+
+                await maxTasks.WaitAsync();
+            }
+
+
             // This determines the maximum amount of memory used.
             // The producer (datareader) can keep producing, while the consumer (VirusScanner) is behind
             // up to these number of object. Every object is a maximum of 2 MB.
@@ -112,56 +157,39 @@ internal static class Program
 
             using var fsProvider = new FileSystemProvider(baseDirectory);
 
-            var hasPermissionToRun = await maxTasks.WaitAsync(0);
+            var thisVM = await VirtualMachine.FindAndOpen(vm, fsProvider);
+            var dataReader = new VMDataReader(thisVM, communicationChannel.Writer);
+            var scanner = new VirusScanner<IVirusEngine>(vm, communicationChannel.Reader, typeof(ClamEngine), scanThreadsPerVM);
 
-            if (!hasPermissionToRun && allTasks.Count > 0)
-            {
-                logger.Info($"Maximum number of threads running {allTasks.Count}. Waiting for one to complete");
-                var completedTask = await Task.WhenAny(allTasks);
-                var intermediateTask = await completedTask;
-                var completedScanner = await intermediateTask.Scanner;
-
-                completedScanner.VirusFound -= ScanManager.VirusFound;
-                completedScanner.ScanCompleted -= ScanManager.ScanCompleted;
-                maxTasks.Release();
-                lock (allTasks)
-                {
-                    allTasks.Remove(completedTask);
-                }
-                await maxTasks.WaitAsync();
-            }
+            scanner.ScanCompleted += ScanManager.ScanCompleted;
+            scanner.VirusFound += ScanManager.VirusFound;
 
             var newTask = Task.Run(async () =>
             {
-                var thisVM = await VirtualMachine.FindAndOpen(vm, fsProvider);
-                var dataReader = new VMDataReader(thisVM, communicationChannel.Writer);
-                var scanner = new VirusScanner(thisVM.Name, communicationChannel.Reader, clamAVServer);
+                var subTasks = new List<Task>
+                {
+                    dataReader.Start(simultaneousVolumesPerVM),
+                    scanner.Start(avEngineOptions)
+                };
 
-                scanner.ScanCompleted += ScanManager.ScanCompleted;
-                scanner.VirusFound += ScanManager.VirusFound;
-
-                return (scanner.Start(), dataReader.Start());
+                await Task.WhenAll(subTasks);
             });
-            lock (allTasks)
+            
+            lock (runningTasks)
             {
-                allTasks.Add(newTask);
+                runningTasks.Add(newTask);
             }
+
+            scannerInstances.TryAdd(newTask.Id, scanner);
         }
 
-        var tupleTasks = await Task.WhenAll(allTasks);
-        var tasks1 = new List<Task<VirusScanner>>();
-        var tasks2 = new List<Task<VMDataReader>>();
-
-        foreach(var (Scanner, DataReader) in tupleTasks)
+        await Task.WhenAll(runningTasks);
+        foreach(var instance in scannerInstances)
         {
-            tasks1.Add(Scanner);
-            tasks2.Add(DataReader);
+            instance.Value.VirusFound -= ScanManager.VirusFound;
+            instance.Value.ScanCompleted -= ScanManager.ScanCompleted;
         }
-        
-        // Datareader should exit before scanner
-        await Task.WhenAll(tasks2);
-        await Task.WhenAll(tasks1);
-       
+
         logger.Info($"Full runtime of {vmNames.Length} VMs {totalRuntimeStopwatch.Elapsed}");
         return 0;
     }
