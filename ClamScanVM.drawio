@@ -1,0 +1,55 @@
+<mxfile host="Electron" modified="2023-07-16T16:25:50.269Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/21.2.8 Chrome/112.0.5615.165 Electron/24.2.0 Safari/537.36" etag="JJfFKlpXgPanRtwCx-fa" version="21.2.8" type="device">
+  <diagram id="prtHgNgQTEPvFCAcTncT" name="Page-1">
+    <mxGraphModel dx="1097" dy="769" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-1" value="VM" style="html=1;dashed=0;whiteSpace=wrap;shape=mxgraph.dfd.start" vertex="1" parent="1">
+          <mxGeometry x="80" y="270" width="80" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-2" value="string" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="160" y="290" as="sourcePoint" />
+            <mxPoint x="230" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-3" value="FindAndOpen" style="html=1;dashed=0;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="230" y="260" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-4" value="LogicalVolume" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="380" y="300" as="sourcePoint" />
+            <mxPoint x="510" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-5" value="FileOpener" style="html=1;dashed=0;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="510" y="260" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-6" value="Scan All?" style="shape=rhombus;html=1;dashed=0;whiteSpace=wrap;perimeter=rhombusPerimeter;" vertex="1" parent="1">
+          <mxGeometry x="540" y="420" width="60" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-7" value="FileMeta" style="endArrow=classic;html=1;rounded=0;entryX=0.467;entryY=0.18;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" target="aNb-HQqYuYUBUdm7wySo-6">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="570" y="330" as="sourcePoint" />
+            <mxPoint x="620" y="280" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-9" value="No" style="endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="540" y="445" as="sourcePoint" />
+            <mxPoint x="450" y="445" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-10" value="Extension&lt;br&gt;match?" style="shape=rhombus;html=1;dashed=0;whiteSpace=wrap;perimeter=rhombusPerimeter;" vertex="1" parent="1">
+          <mxGeometry x="390" y="420" width="60" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="aNb-HQqYuYUBUdm7wySo-11" value="yes" style="endArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="570" y="470" as="sourcePoint" />
+            <mxPoint x="570" y="530" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

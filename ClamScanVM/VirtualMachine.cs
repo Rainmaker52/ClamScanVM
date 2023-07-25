@@ -222,4 +222,12 @@ internal class VirtualMachine : IDisposable
         await vm.OpenVM();
         return vm;
     }
+
+    internal async IAsyncEnumerable<LogicalVolumeInfo> GetVolumes()
+    {
+        foreach(var volume in this.Volumes)
+        {
+            yield return volume;
+        }
+    }
 }

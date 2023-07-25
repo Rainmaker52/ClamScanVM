@@ -8,4 +8,4 @@ public enum ScanResultDescription : byte
     Error = 3
 }
 
-public record ScanResult(ScanResultDescription ShortResult, string? Payload = null);
+public record ScanResult(ScanResultDescription ShortResult, string VMName, string FileName, ulong BlockNumber, string? Payload = null);

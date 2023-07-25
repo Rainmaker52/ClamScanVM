@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.CommandLine;
 using DiscUtils.Complete;
@@ -9,10 +9,6 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks.Dataflow;
 using DiscUtils;
-using ClamScanVM;
-using System.CommandLine.Invocation;
-
-namespace ClamScanVM;
 
 class Program
 {
@@ -73,8 +69,6 @@ class Program
             avEngineOptions.Add(KeyValuePair.Create(k, v));
         }
 
-        var disposableTracker = new List<IDisposable>();
-
         // Create the Dataflow pipeline
         var linkOptions = new DataflowLinkOptions() { PropagateCompletion = true };
         var vmFinderFunc = new Func<string, IEnumerable<LogicalVolumeInfo>>(name =>
@@ -82,47 +76,30 @@ class Program
             var thisVM = VirtualMachine.FindAndOpen(name, new FileSystemProvider(baseDirectory)).Result;
             return thisVM.Volumes;
         });
-        var resultSinkFunc = new Action<ScanResult>((scanResult) =>
+        var fileReaderTransform = new TransformBlock<LogicalVolumeInfo, VMFileBlock>(logicalvolume => null);
+        var fileScannerTransform = new TransformBlock<VMFileBlock, VMFileBlock>(fileBlock => null);
+        var fileWriterAction = new ActionBlock<VMFileBlock>(fileBlock =>
         {
-            switch (scanResult.ShortResult)
+            if (fileBlock != null)
             {
-                case ScanResultDescription.Clean:
-                    // Possible audit action here
-                    break;
-                case ScanResultDescription.ThreatFound:
-                    var e = new VirusFoundEventArgs()
-                    {
-                        FileName = dataToScan.FileName,
-                        VirusName = scanResult.Payload ?? "(Virus name not returned by scanner)",
-                        Offset = dataToScan.BlockNumber,
-                        VMName = this.vmName
-                    };
-                    OnVirusFound(e);
-                    break;
-                case ScanResultDescription.Error:
-                    logger.Warn($"Error returned from virusscanner while scanning {dataToScan.FileName} - Response [{scanResult.Payload}]");
-                    this.errors.Add(new VirusScanException());
-                    break;
-                case ScanResultDescription.Unknown:
-                    logger.Warn($"Unknown response when scanning {dataToScan.FileName} - Response [{scanResult.Payload}]");
-                    break;
-                default:
-                    throw new UnreachableException();
+                Console.WriteLine(fileBlock.LogicalVolume.VolumeName + ":" + fileBlock.FilePath);
             }
         });
 
+        var vmFinder = new TransformBlock<string, IEnumerable<LogicalVolumeInfo>>(vmFinderFunc);
 
-        var volumeFinder = new TransformManyBlock<string, LogicalVolumeInfo>(vmFinderFunc);
-
+        vmFinder.LinkTo(fileReaderTransform, linkOptions);
+        fileReaderTransform.LinkTo(fileScannerTransform, linkOptions);
+        fileScannerTransform.LinkTo(fileWriterAction, linkOptions);
 
         foreach (var vm in vmNames)
         {
-            volumeFinder.Post(vm);
+            vmFinder.Post(vm);
         }
 
-        volumeFinder.Complete();
+        vmFinder.Complete();
 
-        await resultSink.Completion;
+        await fileWriterAction.Completion;
 
         return 0;
     }
